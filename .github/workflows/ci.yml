@@ -148,3 +148,43 @@ jobs:
       - name: Show container logs
         if: always()
         run: docker logs app || true
+
+  # JOB 4: deploy to Render. Only runs if the Docker job passed, and only for
+  # pushes to main (not PRs). It POSTs to Render's secret deploy hook
+  deploy:
+    name: Deploy
+    # Wait for the Docker job, which itself waited for the PHP and TS jobs.
+    # So nothing deploys unless every check passed.
+    needs: [docker]
+    # Only deploy for pushes to main (a merged PR), never for an open PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Records each deploy under "production" in GitHub's Environments page
+    environment: production
+    steps:
+      # POST to Render's secret deploy hook URL: "deploy the latest main now".
+      # The URL comes from the encrypted secret, never from the repo.
+      # -f fails on HTTP errors, -sS stays quiet but still shows errors.
+      - name: Trigger Render deploy
+        run: curl -fsS -X POST "$DEPLOY_HOOK"
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+
+      # Check the live site every 10 seconds (up to 60 times, so 10 minutes)
+      # until its footer shows this commit's hash ($GITHUB_SHA).
+      # exit 0 = success (green), exit 1 = failure (red).
+      - name: Wait for this commit to go live
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsSL "$PROD_URL/athletes" | grep -q "$GITHUB_SHA"; then
+              echo "Live: $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "The new version never appeared at $PROD_URL"
+          exit 1
+        env:
+          # A plain (non-secret) repository variable holding your site's address
+          PROD_URL: ${{ vars.PROD_URL }}
