@@ -1,0 +1,34 @@
+# .dockerignore: create this file in the project root.
+# "docker build ." sends your project folder to the Docker engine. Anything
+# listed here is left out. Lines starting with # are comments.
+
+# Git history and CI config aren't needed to run the app
+.git
+.github
+
+# Installed packages: big, and reinstalled cleanly inside the image anyway
+node_modules
+vendor
+
+# Built frontend files: rebuilt inside the image
+public/build
+public/hot
+
+# Secrets must never be baked into an image...
+.env
+.env.*
+# ...except the safe template (! means "don't ignore this one")
+!.env.example
+
+# Your local database and Laravel's temporary files
+database/*.sqlite
+storage/logs/*
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+
+# Tests run in CI, not in production
+tests
+
+# Laravel package caches built on your laptop (they list dev packages like Pail)
+bootstrap/cache/*.php
