@@ -1,0 +1,150 @@
+# .github/workflows/ci.yml: create this file
+# (make the folder first: mkdir -p .github/workflows)
+# GitHub runs every .yml file in .github/workflows automatically.
+# YAML rules: indentation matters (spaces, never tabs), "key: value" sets
+# something, and "- " starts an item in a list.
+
+# The name shown in the GitHub Actions tab and next to each commit
+name: CI
+
+# WHEN to run: on every push to main, and on every pull request into main
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# The robot may read the code but not change anything ("least privilege")
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older, now-pointless run
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# WHAT to run. Each job gets its own fresh Linux machine (a "runner").
+# Jobs without "needs" run at the same time.
+jobs:
+  # ---------- Job 1: the PHP side (repeats the Test Lab level) ----------
+  backend:
+    # The name shown in GitHub, and the name branch protection will require
+    name: PHP tests
+    # A brand-new Ubuntu machine that GitHub lends you, then throws away
+    runs-on: ubuntu-latest
+    # Stop runaway jobs instead of burning free minutes
+    timeout-minutes: 10
+    steps:
+      # The machine starts empty, so download your code first.
+      # "uses" runs a ready-made action. @v7 pins its version.
+      - uses: actions/checkout@v7
+
+      # Install PHP 8.4 (and Composer). coverage: none skips a slow extra tool.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+
+      # Cache Composer packages. The key is a fingerprint (hash) of composer.lock:
+      # same lock file = same key = restore vendor/ instead of downloading it all.
+      - uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+
+      # "run" types a command in the runner's terminal.
+      # Install the exact versions from composer.lock, without asking questions.
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      # Laravel won't boot without a .env and an APP_KEY, even in tests.
+      # Copy the safe template and generate a throwaway key just for this run.
+      # The | lets one step run several lines.
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # Fail if any file doesn't match the code style
+      - name: Check code style
+        run: vendor/bin/pint --test
+
+      # Fail if any test fails (non-zero exit code = red X)
+      - name: Run tests
+        run: php artisan test
+
+  # ---------- Job 2: the TypeScript side (repeats the Live Search level) ----------
+  frontend:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # Install Node 24. cache: npm saves npm's downloads between runs,
+      # keyed on package-lock.json (the same caching idea as above).
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Install the exact versions from package-lock.json
+      - run: npm ci
+
+      # The script you added to package.json: tsc, then vite build
+      - name: Type check and build
+        run: npm run verify
+
+  # ---------- Job 3: the container (repeats the Containerize level) ----------
+  docker:
+    name: Docker image
+    # Wait for both jobs above. If either fails, skip this one:
+    # no point building an image from code that already failed.
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Buildx is Docker's newer builder. It can store layer caches in GitHub.
+      - uses: docker/setup-buildx-action@v3
+
+      # Build the image from your Dockerfile:
+      #   load: true          keep the image on this runner so we can run it
+      #   tags                name it recruitboard:ci
+      #   cache-from/cache-to reuse and save Docker layers in GitHub's cache
+      #                       (type=gha), so unchanged layers aren't rebuilt
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: recruitboard:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Smoke test: start the container and call it like a real user would.
+      #   -d runs it in the background, --name app lets us refer to it later
+      #   APP_KEY is a random throwaway key; APP_VERSION is this commit's hash
+      # The loop asks /api/health every 2 seconds, up to 30 times, until the
+      # app answers. curl -f makes HTTP errors count as failures.
+      # The last three lines are the real checks: health is ok, the seeded
+      # athletes are served, and the footer shows this commit.
+      - name: Smoke test the container
+        run: |
+          docker run -d --name app -p 8080:80 \
+            -e APP_KEY="base64:$(openssl rand -base64 32)" \
+            -e APP_VERSION="$GITHUB_SHA" \
+            recruitboard:ci
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8080/api/health && break
+            sleep 2
+          done
+          curl -fsS http://localhost:8080/api/health
+          curl -fsS http://localhost:8080/api/athletes | grep -q "Maya Okafor"
+          curl -fsSL http://localhost:8080/ | grep -q "$GITHUB_SHA"
+
+      # Print the container's logs even when an earlier step failed
+      # (if: always()), so you can read why it broke
+      - name: Show container logs
+        if: always()
+        run: docker logs app || true
