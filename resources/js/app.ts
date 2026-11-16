@@ -22,6 +22,7 @@ interface Athlete {
 const form = document.querySelector<HTMLFormElement>('#filters');
 const list = document.querySelector<HTMLUListElement>('#athlete-list');
 const count = document.querySelector<HTMLParagraphElement>('#result-count');
+const broken: number = 'not a number';
 
 // Rebuild the list on the page from an array of athletes.
 // ": void" means this function doesn't return anything.
