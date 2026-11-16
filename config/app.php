@@ -123,6 +123,12 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    // Which version of the app is running (shown in the page footer).
+    // env() reads an environment variable:
+    //   1. use APP_VERSION if it is set (CI and docker run set it),
+    //   2. otherwise RENDER_GIT_COMMIT (Render sets it to the deployed commit),
+    //   3. otherwise the word 'development' (your Mac).
+    // The rest of the app reads it with config('app.version'), never env().
     'version' => env('APP_VERSION', env('RENDER_GIT_COMMIT', 'development')),
 
 ];

@@ -1,7 +1,9 @@
 <?php
 
 // database/seeders/AthleteSeeder.php
-// Fixed demo data. It runs in production too, so it can't use Faker.
+// A seeder loads known starting data. These are the demo athletes you will
+// see on the live site. It runs in production too, where Faker isn't
+// installed, so it uses a fixed list instead of fake().
 
 namespace Database\Seeders;
 
@@ -10,8 +12,10 @@ use Illuminate\Database\Seeder;
 
 class AthleteSeeder extends Seeder
 {
+    // run() is what "php artisan db:seed" calls
     public function run(): void
     {
+        // One row per athlete: name, sport, position, grad year, state, GPA
         $athletes = [
             ['Maya Okafor', 'Soccer', 'Forward', 2027, 'NJ', 3.80],
             ['Jordan Reyes', 'Basketball', 'Point Guard', 2028, 'TX', 3.45],
@@ -25,8 +29,13 @@ class AthleteSeeder extends Seeder
             ['Noah Adeyemi', 'Basketball', 'Shooting Guard', 2029, 'GA', 3.20],
         ];
 
+        // Loop over the list. The [...] after "as" unpacks each row, putting
+        // its six values into six named variables in one step.
         foreach ($athletes as [$name, $sport, $position, $year, $state, $gpa]) {
-            // updateOrCreate makes it safe to run the seeder again
+            // updateOrCreate(how to find it, values to set):
+            // if an athlete with this name already exists, update them,
+            // otherwise create a new one. So running the seeder twice
+            // never creates duplicates.
             Athlete::updateOrCreate(
                 ['name' => $name],
                 [

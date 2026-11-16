@@ -1,0 +1,25 @@
+// tsconfig.json
+// Settings for the TypeScript checker (tsc). This file may contain comments.
+{
+    "compilerOptions": {
+        // Which JavaScript version to aim for. ES2022 runs in all modern browsers.
+        "target": "ES2022",
+        // Use modern import/export syntax
+        "module": "ESNext",
+        // Find imported files the same way bundlers like Vite do
+        "moduleResolution": "Bundler",
+        // Built-in types to know about: modern JavaScript plus the browser's
+        // DOM (document, HTMLElement, fetch, and so on)
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        // Also load Vite's types, for things like import.meta.env
+        "types": ["vite/client"],
+        // Turn on all the strict checks, like "this value might be null"
+        "strict": true,
+        // Only CHECK the code. Don't write any output files: Vite does the building.
+        "noEmit": true,
+        // Don't type-check the libraries in node_modules, only your code
+        "skipLibCheck": true
+    },
+    // Which files to check: every .ts file under resources/js
+    "include": ["resources/js/**/*.ts"]
+}
