@@ -1,58 +1,130 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# RecruitBoard
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+[![CI](https://github.com/lizlouise1335/recruitboard/actions/workflows/ci.yml/badge.svg)](https://github.com/lizlouise1335/recruitboard/actions/workflows/ci.yml)
 
-## About Laravel
+A small athlete-recruiting directory, built to practice the full path from code to production. Coaches can browse high-school athletes, filter by sport and grad year, search live as they type, and open a profile.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+The app itself is small on purpose. The point is everything around it: tests, type checking, a container image, and a CI pipeline that has to pass before anything reaches `main`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**Live demo:** https://recruitboard.onrender.com
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Stack
 
-## Learning Laravel
+| Layer | Tool |
+|---|---|
+| Backend | PHP 8.4, Laravel 13, Eloquent ORM |
+| Database | SQLite |
+| Frontend | Blade templates, Tailwind CSS 4, TypeScript (live search) |
+| Build | Vite |
+| Quality | PHPUnit feature tests, Laravel Pint (code style), `tsc --noEmit` |
+| Container | Multi-stage Docker image (Node → Composer → PHP + Apache) |
+| CI | GitHub Actions |
+| Hosting | Render (Docker web service) |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Features
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Athlete list** at `/athletes`, with filters for name, sport and grad year
+- **Live search** in TypeScript: it calls the JSON API as you type and redraws the list without reloading the page
+- **Profile pages** at `/athletes/{id}`, which return a 404 for unknown IDs
+- **JSON API** at `/api/athletes`, which takes the same `q`, `sport` and `grad_year` filters
+- **Health check** at `/api/health`, used by CI and the host to confirm the app is up
+- **Version footer** showing the commit that's running, so you can tell which build is live
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## How it fits together
 
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+ push / pull request
+        │
+        ▼
+ ┌──────────────── GitHub Actions (ci.yml) ────────────────┐
+ │  PHP tests ──────┐                                      │
+ │  (Pint + PHPUnit)├──► Docker image ──► smoke test        │
+ │  TypeScript ─────┘    (build, cached)  (health, data,   │
+ │  (tsc + vite build)                     commit hash)    │
+ └──────────────────────────────────────────────────────────┘
+        │  all green + PR approved (branch ruleset on main)
+        ▼
+      main ──► Deploy job ──► Render deploy hook ──► wait until the
+               (push only)                           live site shows
+                                                     this commit
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+- **Two parallel jobs** check the PHP and TypeScript sides at the same time.
+- **The Docker job** runs only if both pass (`needs`). It builds the real production image, starts it, and checks that `/api/health` responds, that the seeded athletes come back, and that the footer shows the commit being tested.
+- **Caching:** Composer, npm and Docker layer caches are keyed on the lock files, so a PHP-only change doesn't reinstall JavaScript packages.
+- **The deploy job** runs only on pushes to `main` (after a PR merges). It calls Render's deploy hook, then checks `/athletes` until the footer shows the new commit hash. The job goes green only once that version is actually live, not as soon as Render accepts the request.
+- **Secrets vs. variables:** the deploy hook URL is a secret (anyone holding it can trigger deploys). `PROD_URL` is a plain variable, because it's public anyway.
+- **Least privilege:** the workflow token is read-only (`permissions: contents: read`).
 
-## Contributing
+## Run it locally
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+You'll need PHP 8.4, Composer and Node 24.
 
-## Code of Conduct
+```bash
+git clone https://github.com/lizlouise1335/recruitboard.git
+cd recruitboard
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+composer install
+npm install
 
-## Security Vulnerabilities
+cp .env.example .env
+php artisan key:generate
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+touch database/database.sqlite
+php artisan migrate --seed     # creates the tables and loads 10 demo athletes
 
-## License
+npm run build                  # or "npm run dev" in a second terminal for hot reload
+php artisan serve              # http://localhost:8000
+```
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Run it in Docker
+
+This builds the same image CI tests:
+
+```bash
+docker build -t recruitboard .
+docker run --rm -p 8080:80 \
+  -e APP_KEY="base64:$(openssl rand -base64 32)" \
+  recruitboard
+# open http://localhost:8080
+```
+
+Each time it starts, the container runs migrations and the seeder. Both are safe to repeat, because the seeder uses `updateOrCreate`. The SQLite file lives inside the container, so any data you add is gone when the container is removed.
+
+## Checks
+
+These are the same checks CI runs:
+
+```bash
+php artisan test        # feature tests
+vendor/bin/pint --test  # code style (drop --test to auto-fix)
+npm run typecheck       # TypeScript only
+npm run verify          # typecheck + production build
+```
+
+The tests cover the health endpoint, the athlete list, API filtering by sport, profile pages, and the 404 for a missing athlete.
+
+## Project layout
+
+```
+app/Http/Controllers/AthleteController.php   list, profile and JSON search
+app/Models/Athlete.php                       Eloquent model + casts
+database/migrations/                         athletes table
+database/seeders/AthleteSeeder.php           10 demo athletes (idempotent)
+database/factories/AthleteFactory.php        fake athletes for tests
+resources/views/                             Blade layout, list, profile
+resources/js/app.ts                          TypeScript live search
+routes/web.php                               every URL in the app
+tests/Feature/                               HTTP-level tests
+Dockerfile, docker/entrypoint.sh             production image + startup
+.github/workflows/ci.yml                     the pipeline, including deploy
+```
+
+## Roadmap
+
+- [x] Laravel scaffold, athletes table, seed data
+- [x] Feature tests
+- [x] TypeScript live search
+- [x] Docker image
+- [x] CI pipeline with a branch ruleset on `main`
+- [x] Deploy to Render through a deploy hook after CI passes
