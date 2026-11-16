@@ -1,4 +1,5 @@
 <?php
+
 // database/seeders/AthleteSeeder.php
 // Fixed demo data. It runs in production too, so it can't use Faker.
 

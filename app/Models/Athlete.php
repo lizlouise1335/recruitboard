@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use Database\Factories\AthleteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class Athlete extends Model
 {
-    /** @use HasFactory<\Database\Factories\AthleteFactory> */
+    /** @use HasFactory<AthleteFactory> */
     use HasFactory;
 
     protected $fillable = [

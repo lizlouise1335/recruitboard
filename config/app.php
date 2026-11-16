@@ -123,4 +123,6 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'version' => env('APP_VERSION', env('RENDER_GIT_COMMIT', 'development')),
+
 ];
