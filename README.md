@@ -6,7 +6,7 @@ A small athlete-recruiting directory, built to practice the full path from code 
 
 The app itself is small on purpose. The point is everything around it: tests, type checking, a container image, and a CI pipeline that has to pass before anything reaches `main`.
 
-**Live demo:** _coming soon (Render)_
+**Live demo:** https://recruitboard.onrender.com
 
 ## Stack
 
@@ -19,7 +19,7 @@ The app itself is small on purpose. The point is everything around it: tests, ty
 | Quality | PHPUnit feature tests, Laravel Pint (code style), `tsc --noEmit` |
 | Container | Multi-stage Docker image (Node → Composer → PHP + Apache) |
 | CI | GitHub Actions |
-| Hosting | Render (planned) |
+| Hosting | Render (Docker web service) |
 
 ## Features
 
@@ -44,12 +44,16 @@ The app itself is small on purpose. The point is everything around it: tests, ty
  └──────────────────────────────────────────────────────────┘
         │  all green + PR approved (branch ruleset on main)
         ▼
-      main ──► Render deploy (planned)
+      main ──► Deploy job ──► Render deploy hook ──► wait until the
+               (push only)                           live site shows
+                                                     this commit
 ```
 
 - **Two parallel jobs** check the PHP and TypeScript sides at the same time.
 - **The Docker job** runs only if both pass (`needs`). It builds the real production image, starts it, and checks that `/api/health` responds, that the seeded athletes come back, and that the footer shows the commit being tested.
 - **Caching:** Composer, npm and Docker layer caches are keyed on the lock files, so a PHP-only change doesn't reinstall JavaScript packages.
+- **The deploy job** runs only on pushes to `main` (after a PR merges). It calls Render's deploy hook, then checks `/athletes` until the footer shows the new commit hash. The job goes green only once that version is actually live, not as soon as Render accepts the request.
+- **Secrets vs. variables:** the deploy hook URL is a secret (anyone holding it can trigger deploys). `PROD_URL` is a plain variable, because it's public anyway.
 - **Least privilege:** the workflow token is read-only (`permissions: contents: read`).
 
 ## Run it locally
@@ -113,7 +117,7 @@ resources/js/app.ts                          TypeScript live search
 routes/web.php                               every URL in the app
 tests/Feature/                               HTTP-level tests
 Dockerfile, docker/entrypoint.sh             production image + startup
-.github/workflows/ci.yml                     the pipeline
+.github/workflows/ci.yml                     the pipeline, including deploy
 ```
 
 ## Roadmap
@@ -123,4 +127,4 @@ Dockerfile, docker/entrypoint.sh             production image + startup
 - [x] TypeScript live search
 - [x] Docker image
 - [x] CI pipeline with a branch ruleset on `main`
-- [ ] Deploy to Render through a deploy hook after CI passes
+- [x] Deploy to Render through a deploy hook after CI passes
